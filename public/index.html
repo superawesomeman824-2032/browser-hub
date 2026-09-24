@@ -18,7 +18,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-    .chrome { background: var(--tab-inactive); display: flex; flex-direction: column; border-bottom: 1px solid var(--border); }
+    .chrome { background: var(--tab-inactive); display: flex; flex-direction: column; border-bottom: 1px solid var(--border); position: relative; z-index: 100; }
     .tab-bar { display: flex; align-items: center; padding: 6px 6px 0 6px; gap: 4px; overflow-x: auto; }
     .tab { background: transparent; padding: 8px 12px; border-radius: 8px 8px 0 0; font-size: 12px; color: var(--text-dim); cursor: pointer; display: flex; align-items: center; gap: 8px; min-width: 130px; max-width: 220px; user-select: none; transition: background 0.15s ease; }
     .tab.active { background: var(--topbar); color: var(--text); border: 1px solid var(--border); border-bottom: none; }
@@ -30,11 +30,17 @@
     .add-tab-btn { background: none; border: none; color: var(--text); padding: 6px 10px; cursor: pointer; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
     .add-tab-btn:hover { background: var(--topbar); }
 
-    .toolbar { background: var(--topbar); display: flex; align-items: center; padding: 6px 12px; gap: 6px; }
+    .toolbar { background: var(--topbar); display: flex; align-items: center; padding: 6px 12px; gap: 6px; position: relative; }
     .nav-btn { background: none; border: none; color: var(--text); cursor: pointer; padding: 6px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
     .nav-btn:hover { background: rgba(255,255,255,0.08); }
-    .address-bar { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 4px 14px; display: flex; align-items: center; }
+    .address-wrapper { flex: 1; position: relative; }
+    .address-bar { background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 4px 14px; display: flex; align-items: center; }
     .address-bar input { width: 100%; background: none; border: none; outline: none; color: var(--text); font-size: 13px; }
+
+    /* Search Suggestions Dropdown */
+    .suggestions-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: var(--topbar); border: 1px solid var(--border); border-top: none; border-radius: 0 0 12px 12px; max-height: 250px; overflow-y: auto; display: none; box-shadow: 0 8px 16px rgba(0,0,0,0.4); margin-top: 4px; z-index: 1000; }
+    .suggestion-item { padding: 8px 16px; font-size: 13px; color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 10px; }
+    .suggestion-item:hover, .suggestion-item.selected { background: rgba(255,255,255,0.08); color: var(--accent); }
 
     .bookmarks { background: var(--topbar); display: flex; gap: 16px; padding: 4px 16px 8px 16px; border-bottom: 1px solid var(--border); font-size: 12px; }
     .bm-link { color: var(--text-dim); cursor: pointer; text-decoration: none; font-weight: 500; transition: color 0.15s ease; }
@@ -69,8 +75,11 @@
       <button class="nav-btn" onclick="reloadTab()" title="Reload">
         <svg viewBox="0 0 24 24" width="16" height="16"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
       </button>
-      <div class="address-bar">
-        <input type="text" id="urlInput" placeholder="Search Google or type a URL..." onkeydown="handleEnter(event)">
+      <div class="address-wrapper">
+        <div class="address-bar">
+          <input type="text" id="urlInput" placeholder="Search Google or type a URL..." oninput="fetchSuggestions(this.value)" onkeydown="handleKeyDown(event)" autocomplete="off">
+        </div>
+        <div class="suggestions-dropdown" id="suggestionsBox"></div>
       </div>
     </div>
     <div class="bookmarks">
@@ -85,13 +94,15 @@
   <div class="viewport" id="viewport">
     <div class="home-screen" id="homeScreen">
       <h1>Browser Hub</h1>
-      <p>Type a website URL or calculation above to start browsing.</p>
+      <p>Type a website URL or search term above to start browsing.</p>
     </div>
   </div>
 
   <script>
     let tabs = [];
     let activeId = null;
+    let selectedSuggestionIndex = -1;
+    let debounceTimer = null;
 
     function createNewTab(targetUrl = "") {
       const id = "tab-" + Date.now();
@@ -122,6 +133,7 @@
       activeId = id;
       const homeScreen = document.getElementById("homeScreen");
       const urlInput = document.getElementById("urlInput");
+      closeSuggestions();
 
       tabs.forEach(t => {
         if (t.id === id) {
@@ -156,21 +168,60 @@
       }
     }
 
+    function fetchSuggestions(query) {
+      clearTimeout(debounceTimer);
+      const box = document.getElementById("suggestionsBox");
+      if (!query.trim() || query.startsWith("http://") || query.startsWith("https://")) {
+        closeSuggestions();
+        return;
+      }
+
+      debounceTimer = setTimeout(async () => {
+        try {
+          const res = await fetch('/api/suggestions?q=' + encodeURIComponent(query));
+          const list = await res.json();
+
+          if (list.length === 0) {
+            closeSuggestions();
+            return;
+          }
+
+          box.innerHTML = "";
+          selectedSuggestionIndex = -1;
+
+          list.slice(0, 6).forEach((item, index) => {
+            const div = document.createElement("div");
+            div.className = "suggestion-item";
+            div.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg> ${item}`;
+            div.onclick = () => {
+              loadInActive(item);
+              closeSuggestions();
+            };
+            box.appendChild(div);
+          });
+          box.style.display = "block";
+        } catch(e) {
+          closeSuggestions();
+        }
+      }, 150);
+    }
+
+    function closeSuggestions() {
+      const box = document.getElementById("suggestionsBox");
+      box.style.display = "none";
+      box.innerHTML = "";
+      selectedSuggestionIndex = -1;
+    }
+
     function parseInputToUrl(input) {
       let raw = input.trim();
       if (!raw) return "";
 
-      // Check if it's a domain name (e.g. defly.io or https://example.com)
       const domainPattern = /^(https?:\/\/)?([\w\-]+\.)+[\w\-]+(\/.*)?$/i;
-      
       if (domainPattern.test(raw)) {
-        if (!/^https?:\/\//i.test(raw)) {
-          return "https://" + raw;
-        }
+        if (!/^https?:\/\//i.test(raw)) return "https://" + raw;
         return raw;
       }
-
-      // Otherwise treat as search query or math calculation (e.g. 1+1)
       return `https://www.google.com/search?q=${encodeURIComponent(raw)}&igu=1`;
     }
 
@@ -204,6 +255,42 @@
       document.getElementById("urlInput").value = finalUrl;
       document.getElementById("homeScreen").style.display = "none";
       tab.iframeEl.src = "/proxy?url=" + encodeURIComponent(finalUrl);
+      closeSuggestions();
+    }
+
+    function handleKeyDown(e) {
+      const box = document.getElementById("suggestionsBox");
+      const items = box.querySelectorAll(".suggestion-item");
+
+      if (e.key === "ArrowDown" && items.length > 0) {
+        e.preventDefault();
+        selectedSuggestionIndex = (selectedSuggestionIndex + 1) % items.length;
+        updateSuggestionHighlight(items);
+      } else if (e.key === "ArrowUp" && items.length > 0) {
+        e.preventDefault();
+        selectedSuggestionIndex = (selectedSuggestionIndex - 1 + items.length) % items.length;
+        updateSuggestionHighlight(items);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (selectedSuggestionIndex >= 0 && items[selectedSuggestionIndex]) {
+          items[selectedSuggestionIndex].click();
+        } else {
+          loadInActive(e.target.value);
+        }
+      } else if (e.key === "Escape") {
+        closeSuggestions();
+      }
+    }
+
+    function updateSuggestionHighlight(items) {
+      items.forEach((item, index) => {
+        if (index === selectedSuggestionIndex) {
+          item.classList.add("selected");
+          document.getElementById("urlInput").value = item.textContent.trim();
+        } else {
+          item.classList.remove("selected");
+        }
+      });
     }
 
     function goBack() {
@@ -225,9 +312,9 @@
       if (tab && tab.iframeEl) tab.iframeEl.src = tab.iframeEl.src;
     }
 
-    function handleEnter(e) {
-      if (e.key === "Enter") loadInActive(e.target.value);
-    }
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest(".address-wrapper")) closeSuggestions();
+    });
 
     createNewTab();
   </script>
