@@ -82,7 +82,7 @@
       </div>
     </div>
     <div class="bookmarks">
-      <span class="bm-link" onclick="loadInActive('https://html.duckduckgo.com/html/')">Search</span>
+      <span class="bm-link" onclick="loadInActive('https://www.google.com/search?igu=1')">Google Search</span>
       <span class="bm-link" onclick="loadInActive('https://defly.io')">Defly.io</span>
       <span class="bm-link" onclick="loadInActive('https://www.wikipedia.org')">Wikipedia</span>
       <span class="bm-link" onclick="loadInActive('https://www.reddit.com')">Reddit</span>
@@ -221,7 +221,7 @@
         if (!/^https?:\/\//i.test(raw)) return "https://" + raw;
         return raw;
       }
-      return `https://html.duckduckgo.com/html/?q=${encodeURIComponent(raw)}`;
+      return `https://www.google.com/search?q=${encodeURIComponent(raw)}&igu=1`;
     }
 
     function loadInActive(inputUrl, isNavigatingHistory = false) {
