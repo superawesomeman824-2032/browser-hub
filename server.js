@@ -5,11 +5,11 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Serve frontend files from "public" directory
+// Serve static frontend files from "public" directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Dynamic Proxy Route - strips security headers so sites render inside browser tabs
-app.use('/proxy', (req, res, next) => {
+// Proxy endpoint using app.all to match all HTTP methods
+app.all('/proxy', (req, res, next) => {
   const targetUrl = req.query.url;
   if (!targetUrl) return res.status(400).send('Missing target URL');
 
@@ -24,11 +24,11 @@ app.use('/proxy', (req, res, next) => {
     target: parsedUrl.origin,
     changeOrigin: true,
     followRedirects: true,
-    pathFilter: '/proxy',
+    // Rewrite path to target destination URL path + query string
     pathRewrite: () => parsedUrl.pathname + parsedUrl.search,
     on: {
       proxyRes: (proxyRes) => {
-        // Remove iframe blocking headers
+        // Strip headers that block iframe embedding
         delete proxyRes.headers['x-frame-options'];
         delete proxyRes.headers['content-security-policy'];
         delete proxyRes.headers['content-security-policy-report-only'];
