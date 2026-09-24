@@ -37,7 +37,6 @@
     .address-bar { background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 4px 14px; display: flex; align-items: center; }
     .address-bar input { width: 100%; background: none; border: none; outline: none; color: var(--text); font-size: 13px; }
 
-    /* Search Suggestions Dropdown */
     .suggestions-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: var(--topbar); border: 1px solid var(--border); border-top: none; border-radius: 0 0 12px 12px; max-height: 250px; overflow-y: auto; display: none; box-shadow: 0 8px 16px rgba(0,0,0,0.4); margin-top: 4px; z-index: 1000; }
     .suggestion-item { padding: 8px 16px; font-size: 13px; color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 10px; }
     .suggestion-item:hover, .suggestion-item.selected { background: rgba(255,255,255,0.08); color: var(--accent); }
@@ -189,7 +188,7 @@
           box.innerHTML = "";
           selectedSuggestionIndex = -1;
 
-          list.slice(0, 6).forEach((item, index) => {
+          list.slice(0, 6).forEach((item) => {
             const div = document.createElement("div");
             div.className = "suggestion-item";
             div.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg> ${item}`;
