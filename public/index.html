@@ -11,65 +11,81 @@
       --tab-inactive: #18191d;
       --tab-active: #2a2b32;
       --text: #e1e2e6;
+      --text-dim: #8b8e98;
       --border: #2e3038;
+      --accent: #3b82f6;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
     .chrome { background: var(--tab-inactive); display: flex; flex-direction: column; border-bottom: 1px solid var(--border); }
-    .tab-bar { display: flex; align-items: center; padding: 6px 6px 0 6px; gap: 4px; }
-    .tab { background: transparent; padding: 8px 14px; border-radius: 8px 8px 0 0; font-size: 13px; color: #8b8e98; cursor: pointer; display: flex; align-items: center; gap: 8px; min-width: 120px; max-width: 200px; user-select: none; }
+    .tab-bar { display: flex; align-items: center; padding: 6px 6px 0 6px; gap: 4px; overflow-x: auto; }
+    .tab { background: transparent; padding: 8px 12px; border-radius: 8px 8px 0 0; font-size: 12px; color: var(--text-dim); cursor: pointer; display: flex; align-items: center; gap: 8px; min-width: 130px; max-width: 220px; user-select: none; transition: background 0.15s ease; }
     .tab.active { background: var(--topbar); color: var(--text); border: 1px solid var(--border); border-bottom: none; }
-    .tab-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .tab-close { border: none; background: none; color: #8b8e98; cursor: pointer; font-size: 14px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-    .tab-close:hover { background: rgba(255,255,255,0.1); color: #fff; }
-    .add-tab-btn { background: none; border: none; color: var(--text); font-size: 18px; padding: 4px 10px; cursor: pointer; border-radius: 4px; }
+    .tab:hover:not(.active) { background: rgba(255,255,255,0.04); }
+    .tab-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+    .tab-close { border: none; background: none; color: var(--text-dim); cursor: pointer; border-radius: 50%; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; }
+    .tab-close:hover { background: rgba(255,255,255,0.15); color: #fff; }
+    
+    .add-tab-btn { background: none; border: none; color: var(--text); padding: 6px 10px; cursor: pointer; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
     .add-tab-btn:hover { background: var(--topbar); }
 
-    .toolbar { background: var(--topbar); display: flex; align-items: center; padding: 8px 12px; gap: 8px; }
-    .nav-btn { background: none; border: none; color: var(--text); font-size: 16px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+    .toolbar { background: var(--topbar); display: flex; align-items: center; padding: 6px 12px; gap: 6px; }
+    .nav-btn { background: none; border: none; color: var(--text); cursor: pointer; padding: 6px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
     .nav-btn:hover { background: rgba(255,255,255,0.08); }
-    .address-bar { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; }
+    .address-bar { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 4px 14px; display: flex; align-items: center; }
     .address-bar input { width: 100%; background: none; border: none; outline: none; color: var(--text); font-size: 13px; }
 
-    .bookmarks { background: var(--topbar); display: flex; gap: 12px; padding: 4px 16px 8px 16px; border-bottom: 1px solid var(--border); font-size: 12px; }
-    .bm-link { color: #8b8e98; cursor: pointer; text-decoration: none; }
+    .bookmarks { background: var(--topbar); display: flex; gap: 16px; padding: 4px 16px 8px 16px; border-bottom: 1px solid var(--border); font-size: 12px; }
+    .bm-link { color: var(--text-dim); cursor: pointer; text-decoration: none; font-weight: 500; transition: color 0.15s ease; }
     .bm-link:hover { color: var(--text); }
 
     .viewport { flex: 1; position: relative; background: var(--bg); }
     iframe { width: 100%; height: 100%; border: none; display: none; }
     iframe.active { display: block; }
-    .home-screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 5; }
-    .home-screen h1 { color: #60a5fa; font-size: 28px; margin-bottom: 8px; }
-    .home-screen p { color: #8b8e98; font-size: 14px; }
+
+    .home-screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 5; text-align: center; }
+    .home-screen h1 { color: var(--accent); font-size: 32px; margin-bottom: 8px; font-weight: 600; }
+    .home-screen p { color: var(--text-dim); font-size: 14px; }
+
+    svg { fill: currentColor; }
   </style>
 </head>
 <body>
 
   <div class="chrome">
     <div class="tab-bar" id="tabBar">
-      <button class="add-tab-btn" onclick="createNewTab()">+</button>
+      <button class="add-tab-btn" onclick="createNewTab()" title="New Tab">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+      </button>
     </div>
     <div class="toolbar">
-      <button class="nav-btn" onclick="goBack()">&#129144;</button>
-      <button class="nav-btn" onclick="goForward()">&#129146;</button>
-      <button class="nav-btn" onclick="reloadTab()">&#8635;</button>
+      <button class="nav-btn" onclick="goBack()" title="Back">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+      </button>
+      <button class="nav-btn" onclick="goForward()" title="Forward">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/></svg>
+      </button>
+      <button class="nav-btn" onclick="reloadTab()" title="Reload">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+      </button>
       <div class="address-bar">
         <input type="text" id="urlInput" placeholder="Search Google or type a URL..." onkeydown="handleEnter(event)">
       </div>
     </div>
     <div class="bookmarks">
-      <span class="bm-link" onclick="loadInActive('https://www.google.com')">🔍 Google</span>
-      <span class="bm-link" onclick="loadInActive('https://defly.io')">🎮 Defly.io</span>
-      <span class="bm-link" onclick="loadInActive('https://www.wikipedia.org')">🌐 Wikipedia</span>
-      <span class="bm-link" onclick="loadInActive('https://www.reddit.com')">🤖 Reddit</span>
+      <span class="bm-link" onclick="loadInActive('https://www.google.com/webhp?igu=1')">Google</span>
+      <span class="bm-link" onclick="loadInActive('https://defly.io')">Defly.io</span>
+      <span class="bm-link" onclick="loadInActive('https://www.wikipedia.org')">Wikipedia</span>
+      <span class="bm-link" onclick="loadInActive('https://www.reddit.com')">Reddit</span>
+      <span class="bm-link" onclick="loadInActive('https://github.com')">GitHub</span>
     </div>
   </div>
 
   <div class="viewport" id="viewport">
     <div class="home-screen" id="homeScreen">
       <h1>Browser Hub</h1>
-      <p>Enter a URL above to start browsing inside tabs.</p>
+      <p>Type a website URL or calculation above to start browsing.</p>
     </div>
   </div>
 
@@ -85,12 +101,12 @@
       tabEl.onclick = () => switchTab(id);
       tabEl.innerHTML = `
         <span class="tab-title">New Tab</span>
-        <button class="tab-close" onclick="closeTab('${id}', event)">&times;</button>
+        <button class="tab-close" onclick="closeTab('${id}', event)">
+          <svg viewBox="0 0 24 24" width="12" height="12"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
       `;
 
       const iframeEl = document.createElement("iframe");
-
-      // Tab tracking with custom history stack for back/forward support
       const tabObj = { id, tabEl, iframeEl, url: "", history: [], historyIndex: -1 };
       tabs.push(tabObj);
 
@@ -140,23 +156,34 @@
       }
     }
 
+    function parseInputToUrl(input) {
+      let raw = input.trim();
+      if (!raw) return "";
+
+      // Check if it's a domain name (e.g. defly.io or https://example.com)
+      const domainPattern = /^(https?:\/\/)?([\w\-]+\.)+[\w\-]+(\/.*)?$/i;
+      
+      if (domainPattern.test(raw)) {
+        if (!/^https?:\/\//i.test(raw)) {
+          return "https://" + raw;
+        }
+        return raw;
+      }
+
+      // Otherwise treat as search query or math calculation (e.g. 1+1)
+      return `https://www.google.com/search?q=${encodeURIComponent(raw)}&igu=1`;
+    }
+
     function loadInActive(inputUrl, isNavigatingHistory = false) {
       if (!activeId) createNewTab();
       const tab = tabs.find(t => t.id === activeId);
       if (!tab) return;
 
-      let finalUrl = inputUrl.trim();
-      if (!/^https?:\/\//i.test(finalUrl)) {
-        if (finalUrl.includes(".") && !finalUrl.includes(" ")) {
-          finalUrl = "https://" + finalUrl;
-        } else {
-          finalUrl = "https://www.google.com/search?q=" + encodeURIComponent(finalUrl);
-        }
-      }
+      const finalUrl = parseInputToUrl(inputUrl);
+      if (!finalUrl) return;
 
       tab.url = finalUrl;
 
-      // Maintain internal history stack if not navigating back/forward
       if (!isNavigatingHistory) {
         tab.history = tab.history.slice(0, tab.historyIndex + 1);
         tab.history.push(finalUrl);
@@ -164,7 +191,12 @@
       }
 
       try {
-        tab.tabEl.querySelector(".tab-title").innerText = new URL(finalUrl).hostname.replace("www.", "");
+        const parsed = new URL(finalUrl);
+        if (parsed.hostname.includes("google.com") && parsed.searchParams.has("q")) {
+          tab.tabEl.querySelector(".tab-title").innerText = parsed.searchParams.get("q");
+        } else {
+          tab.tabEl.querySelector(".tab-title").innerText = parsed.hostname.replace("www.", "");
+        }
       } catch(e) {
         tab.tabEl.querySelector(".tab-title").innerText = finalUrl;
       }
