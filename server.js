@@ -8,7 +8,13 @@ const PORT = process.env.PORT || 3000;
 // Serve static frontend files from "public" directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Proxy endpoint using app.all to match all HTTP methods
+// CATCH GOOGLE SEARCHES: Redirects /search?q=... through the proxy URL handler
+app.get('/search', (req, res) => {
+  const googleSearchUrl = 'https://www.google.com' + req.originalUrl;
+  res.redirect('/proxy?url=' + encodeURIComponent(googleSearchUrl));
+});
+
+// Proxy endpoint
 app.all('/proxy', (req, res, next) => {
   const targetUrl = req.query.url;
   if (!targetUrl) return res.status(400).send('Missing target URL');
@@ -24,11 +30,9 @@ app.all('/proxy', (req, res, next) => {
     target: parsedUrl.origin,
     changeOrigin: true,
     followRedirects: true,
-    // Rewrite path to target destination URL path + query string
     pathRewrite: () => parsedUrl.pathname + parsedUrl.search,
     on: {
       proxyRes: (proxyRes) => {
-        // Strip headers that block iframe embedding
         delete proxyRes.headers['x-frame-options'];
         delete proxyRes.headers['content-security-policy'];
         delete proxyRes.headers['content-security-policy-report-only'];
