@@ -1,19 +1,20 @@
 const express = require('express');
 const path = require('path');
-const { createProxyMiddleware, responseInterceptor } = require('http-proxy-middleware');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Serve static frontend files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Redirect standard search queries
+// Catch Google search route
 app.get('/search', (req, res) => {
   const googleSearchUrl = 'https://www.google.com' + req.originalUrl;
   res.redirect('/proxy?url=' + encodeURIComponent(googleSearchUrl));
 });
 
-// Main Proxy Handler
+// Main Proxy Route
 app.all('/proxy', (req, res, next) => {
   const targetUrl = req.query.url;
   if (!targetUrl) return res.status(400).send('Missing target URL');
@@ -29,26 +30,38 @@ app.all('/proxy', (req, res, next) => {
     target: parsedUrl.origin,
     changeOrigin: true,
     followRedirects: true,
-    selfHandleResponse: true,
+    // Add real browser headers so Google doesn't drop/block the connection
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9'
+    },
     pathRewrite: () => parsedUrl.pathname + parsedUrl.search,
     on: {
-      proxyRes: responseInterceptor(async (responseBuffer, proxyRes, req, res) => {
-        // Strip iframe blocking headers
+      proxyReq: (proxyReq) => {
+        // Remove proxy-identifying headers that trigger security blocks
+        proxyReq.removeHeader('x-forwarded-for');
+        proxyReq.removeHeader('x-forwarded-proto');
+        proxyReq.removeHeader('x-forwarded-host');
+      },
+      proxyRes: (proxyRes) => {
+        // Delete all frame-blocking headers from target response
         delete proxyRes.headers['x-frame-options'];
         delete proxyRes.headers['content-security-policy'];
         delete proxyRes.headers['content-security-policy-report-only'];
-        res.setHeader('access-control-allow-origin', '*');
+        delete proxyRes.headers['cross-origin-resource-policy'];
+        delete proxyRes.headers['cross-origin-embedder-policy'];
+        delete proxyRes.headers['frame-options'];
 
-        const contentType = proxyRes.headers['content-type'] || '';
-        // Inject base tag for HTML pages so relative image/script paths load properly
-        if (contentType.includes('text/html')) {
-          let html = responseBuffer.toString('utf8');
-          const baseTag = `<base href="${parsedUrl.origin}/">`;
-          html = html.replace(/<head[^>]*>/i, `$&${baseTag}`);
-          return html;
-        }
-        return responseBuffer;
-      })
+        // Allow iframe rendering
+        proxyRes.headers['access-control-allow-origin'] = '*';
+      }
+    },
+    onError: (err, req, res) => {
+      console.error('Proxy connection error:', err.message);
+      if (!res.headersSent) {
+        res.status(502).send('Proxy Connection Failed: ' + err.message);
+      }
     }
   });
 
