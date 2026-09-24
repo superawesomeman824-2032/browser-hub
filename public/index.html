@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Browser</title>
+  <title>Google</title>
+  <link rel="icon" type="image/png" href="https://www.google.com/favicon.ico">
   <style>
     :root {
       --bg: #202124;
@@ -113,16 +114,13 @@
 
   <div class="viewport" id="viewport">
     <div class="home-screen" id="homeScreen">
-      
       <div class="google-logo">
         <span>G</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span>
       </div>
-
       <div class="ntp-search">
         <svg focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"></path></svg>
         <input type="text" id="ntpSearchInput" placeholder="Search Google or type a URL" onkeydown="handleNtpKeyDown(event)" autocomplete="off">
       </div>
-
       <div class="shortcuts">
         <div class="shortcut" onclick="loadInActive('https://defly.io')">
           <div class="shortcut-icon">🚁</div>
@@ -145,11 +143,31 @@
           <div class="shortcut-title">DuckDuckGo</div>
         </div>
       </div>
-
     </div>
   </div>
 
   <script>
+    // === ABOUT:BLANK CLOAKING ===
+    // Opens a hidden tab to bypass filters and redirects this original tab to Classroom.
+    if (window.top === window.self && window.location.protocol !== "about:") {
+      let win = window.open('about:blank', '_blank');
+      if (win) {
+        let url = window.location.href;
+        win.document.body.style.margin = '0';
+        win.document.body.style.height = '100vh';
+        let iframe = win.document.createElement('iframe');
+        iframe.style.border = 'none';
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframe.style.margin = '0';
+        iframe.src = url;
+        win.document.body.appendChild(iframe);
+        
+        window.location.replace("https://classroom.google.com");
+      }
+    }
+    // ============================
+
     let tabs = [];
     let activeId = null;
     let selectedSuggestionIndex = -1;
@@ -276,11 +294,6 @@
       let raw = input.trim();
       if (!raw) return "";
 
-      /* 
-        This regex ensures TLDs must have at least 2 characters (like .com, .io). 
-        If someone types a typo like "defly.o", it fails the regex and routes 
-        to Google Search instead. Google will then ask "Did you mean: defly.io?".
-      */
       const domainPattern = /^(https?:\/\/)?([\w\-]+\.)+[a-zA-Z]{2,}(\/.*)?$/i;
       
       if (domainPattern.test(raw) && !raw.includes(' ')) {
@@ -288,6 +301,15 @@
         return raw;
       }
       return `https://www.google.com/search?q=${encodeURIComponent(raw)}&igu=1`;
+    }
+
+    // Safely encode URL for backend to prevent 500 errors
+    function safeEncodeBase64(str) {
+      try {
+        return btoa(unescape(encodeURIComponent(str)));
+      } catch (e) {
+        return btoa(str); // Fallback
+      }
     }
 
     function loadInActive(inputUrl, isNavigatingHistory = false) {
@@ -319,7 +341,9 @@
 
       document.getElementById("urlInput").value = finalUrl;
       document.getElementById("homeScreen").style.display = "none";
-      tab.iframeEl.src = "/proxy?url=" + encodeURIComponent(finalUrl);
+      
+      // Use the safe Base64 encoder here
+      tab.iframeEl.src = "/proxy?url=" + safeEncodeBase64(finalUrl);
       closeSuggestions();
     }
 
