@@ -4,24 +4,35 @@ const path = require('path');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
-const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 
-// Serve static frontend files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Smart search route with Google iframe embedding mode (&igu=1)
+// Google Search Autocomplete API
+app.get('/api/suggestions', async (req, res) => {
+  const query = req.query.q;
+  if (!query) return res.json([]);
+  try {
+    const response = await fetch(`https://suggestqueries.google.com/complete/search?client=chrome&q=${encodeURIComponent(query)}`);
+    const data = await response.json();
+    res.json(data[1] || []); // Return list of suggested strings
+  } catch (err) {
+    res.json([]);
+  }
+});
+
+// Google Search Redirect Handler (&igu=1 enables iframe embedding)
 app.get('/search', (req, res) => {
   const query = req.query.q || '';
   const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&igu=1`;
   res.redirect('/proxy?url=' + encodeURIComponent(searchUrl));
 });
 
-// Proxy middleware configuration
-const proxyMiddleware = createProxyMiddleware({
+// Main Proxy Handler
+const proxy = createProxyMiddleware({
   target: 'https://www.google.com',
   changeOrigin: true,
-  ws: true, // Enables WebSocket proxying required for .io games
+  ws: true,
   followRedirects: true,
   router: (req) => {
     const targetUrl = req.query.url;
@@ -29,9 +40,7 @@ const proxyMiddleware = createProxyMiddleware({
       try {
         const parsed = new URL(targetUrl.startsWith('http') ? targetUrl : 'https://' + targetUrl);
         return parsed.origin;
-      } catch (e) {
-        // Fallback on invalid URL syntax
-      }
+      } catch (e) {}
     }
     return 'https://www.google.com';
   },
@@ -41,26 +50,29 @@ const proxyMiddleware = createProxyMiddleware({
       try {
         const parsed = new URL(targetUrl.startsWith('http') ? targetUrl : 'https://' + targetUrl);
         return parsed.pathname + parsed.search;
-      } catch (e) {
-        // Fallback on invalid URL syntax
-      }
+      } catch (e) {}
     }
     return pathStr;
   },
-  headers: {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.9'
-  },
   on: {
-    proxyReq: (proxyReq) => {
-      // Strip proxy headers to prevent security checks from blocking the connection
+    proxyReq: (proxyReq, req) => {
+      const targetUrl = req.query.url;
+      if (targetUrl) {
+        try {
+          const parsed = new URL(targetUrl.startsWith('http') ? targetUrl : 'https://' + targetUrl);
+          // Inject exact domain headers so .io game servers accept the connection
+          proxyReq.setHeader('Host', parsed.host);
+          proxyReq.setHeader('Origin', parsed.origin);
+          proxyReq.setHeader('Referer', parsed.origin + '/');
+        } catch (e) {}
+      }
+      proxyReq.setHeader('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
       proxyReq.removeHeader('x-forwarded-for');
       proxyReq.removeHeader('x-forwarded-proto');
       proxyReq.removeHeader('x-forwarded-host');
     },
     proxyRes: (proxyRes) => {
-      // Delete frame-blocking headers from target websites
+      // Strip frame restrictions and allow cross-origin assets
       delete proxyRes.headers['x-frame-options'];
       delete proxyRes.headers['content-security-policy'];
       delete proxyRes.headers['content-security-policy-report-only'];
@@ -69,22 +81,26 @@ const proxyMiddleware = createProxyMiddleware({
       delete proxyRes.headers['frame-options'];
 
       proxyRes.headers['access-control-allow-origin'] = '*';
-    }
-  },
-  onError: (err, req, res) => {
-    console.error('Proxy connection error:', err.message);
-    if (res && !res.headersSent) {
-      res.status(502).send('Connection error: ' + err.message);
+      proxyRes.headers['access-control-allow-methods'] = '*';
+      proxyRes.headers['access-control-allow-headers'] = '*';
+    },
+    error: (err, req, res) => {
+      console.error('Proxy Exception:', err.message);
+      if (res && !res.headersSent) {
+        res.status(502).send('Proxy Connection Error: ' + err.message);
+      }
     }
   }
 });
 
-app.all('/proxy', proxyMiddleware);
+app.use('/proxy', proxy);
 
-// Pass WebSocket upgrade connections to proxy for live multiplayer games
+const server = http.createServer(app);
+
+// Enable WebSocket proxying for multiplayer games
 server.on('upgrade', (req, socket, head) => {
-  if (req.url.startsWith('/proxy')) {
-    proxyMiddleware.upgrade(req, socket, head);
+  if (req.url && req.url.startsWith('/proxy')) {
+    proxy.upgrade(req, socket, head);
   }
 });
 
