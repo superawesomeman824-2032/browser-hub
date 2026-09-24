@@ -43,18 +43,18 @@ app.get('/api/suggestions', async (req, res) => {
   }
 });
 
-// Search Route
+// Search Route (Uses Google search with igu=1 for guaranteed frame support)
 app.get('/search', (req, res) => {
   const query = req.query.q || '';
-  const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&igu=1`;
   res.redirect('/proxy?url=' + encodeURIComponent(searchUrl));
 });
 
 // Proxy Middleware Engine
 const proxy = createProxyMiddleware({
-  target: 'https://html.duckduckgo.com',
+  target: 'https://www.google.com',
   changeOrigin: true,
-  secure: false, // Prevents 502s on SSL mismatches
+  secure: false,
   ws: true,
   followRedirects: true,
   selfHandleResponse: true,
@@ -65,7 +65,7 @@ const proxy = createProxyMiddleware({
         return new URL(target).origin;
       } catch (e) {}
     }
-    return 'https://html.duckduckgo.com';
+    return 'https://www.google.com';
   },
   pathRewrite: (pathStr, req) => {
     const target = resolveTarget(req);
@@ -110,7 +110,7 @@ const proxy = createProxyMiddleware({
 
       if (proxyRes.headers.location) {
         try {
-          const currentTarget = resolveTarget(req) || 'https://html.duckduckgo.com';
+          const currentTarget = resolveTarget(req) || 'https://www.google.com';
           const currentOrigin = new URL(currentTarget).origin;
           const redirectTarget = new URL(proxyRes.headers.location, currentOrigin).href;
           res.setHeader('location', '/proxy?url=' + encodeURIComponent(redirectTarget));
@@ -119,12 +119,11 @@ const proxy = createProxyMiddleware({
 
       const contentType = proxyRes.headers['content-type'] || '';
       
-      // Inject scripts into HTML without touching binary assets (images, wasm, audio)
       if (contentType.includes('text/html')) {
         try {
           let html = responseBuffer.toString('utf8');
           
-          let origin = 'https://html.duckduckgo.com';
+          let origin = 'https://www.google.com';
           const target = resolveTarget(req);
           if (target) {
             try {
@@ -144,7 +143,6 @@ const proxy = createProxyMiddleware({
 
                 const TARGET_ORIGIN = "${origin}";
 
-                // Hook fetch
                 const originalFetch = window.fetch;
                 window.fetch = function(resource, init) {
                   if (typeof resource === 'string' && !resource.startsWith('/proxy') && !resource.startsWith('data:') && !resource.startsWith('blob:')) {
@@ -156,7 +154,6 @@ const proxy = createProxyMiddleware({
                   return originalFetch.apply(this, [resource, init]);
                 };
 
-                // Hook XMLHttpRequest
                 const originalXHR = window.XMLHttpRequest.prototype.open;
                 window.XMLHttpRequest.prototype.open = function(method, url, ...rest) {
                   if (typeof url === 'string' && !url.startsWith('/proxy') && !url.startsWith('data:')) {
@@ -168,7 +165,6 @@ const proxy = createProxyMiddleware({
                   return originalXHR.call(this, method, url, ...rest);
                 };
 
-                // Hook WebSockets for game servers
                 const OriginalWebSocket = window.WebSocket;
                 window.WebSocket = function(url, protocols) {
                   if (typeof url === 'string' && !url.includes('/proxy')) {
@@ -201,11 +197,11 @@ const proxy = createProxyMiddleware({
       console.error('Proxy Connection Error:', err.message);
       if (res && !res.headersSent) {
         res.status(502).send(`
-          <div style="font-family:-apple-system, sans-serif;padding:40px;background:#121316;color:#e1e2e6;height:100vh;box-sizing:border-box;">
-            <h2 style="color:#f87171;margin-bottom:8px;">502 Bad Gateway</h2>
-            <p style="color:#8b8e98;margin-bottom:16px;">The target site could not be reached or timed out.</p>
-            <p style="font-family:monospace;background:#1e1f24;padding:12px;border-radius:6px;color:#cbd5e1;">${err.message}</p>
-            <button onclick="location.reload()" style="margin-top:16px;padding:8px 16px;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;">Retry Page</button>
+          <div style="font-family:sans-serif;padding:40px;background:#121316;color:#e1e2e6;height:100vh;box-sizing:border-box;">
+            <h2 style="color:#f87171;">502 Bad Gateway</h2>
+            <p style="color:#8b8e98;">Target server timed out or refused connection.</p>
+            <p style="font-family:monospace;background:#1e1f24;padding:12px;border-radius:6px;">${err.message}</p>
+            <button onclick="location.reload()" style="margin-top:16px;padding:8px 16px;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;">Retry</button>
           </div>
         `);
       }
@@ -213,10 +209,8 @@ const proxy = createProxyMiddleware({
   }
 });
 
-// Proxy routes
 app.use('/proxy', proxy);
 
-// Fallback asset proxy handler for missing relative requests
 app.use((req, res, next) => {
   const target = resolveTarget(req);
   if (target && !req.path.startsWith('/api')) {
@@ -225,7 +219,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Handle WebSocket upgrades
 server.on('upgrade', (req, socket, head) => {
   const target = resolveTarget(req);
   if (target || (req.url && req.url.startsWith('/proxy'))) {
@@ -235,4 +228,7 @@ server.on('upgrade', (req, socket, head) => {
   }
 });
 
-server.listen(PORT, () => console.log(`Browser Hub running on port ${PORT}`));
+// Explicitly listen on 0.0.0.0 for Render host binding
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
+});
