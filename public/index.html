@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Browser Hub</title>
+  <style>
+    :root {
+      --bg: #121316;
+      --topbar: #1e1f24;
+      --tab-inactive: #18191d;
+      --tab-active: #2a2b32;
+      --text: #e1e2e6;
+      --border: #2e3038;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* Top Chrome UI */
+    .chrome { background: var(--tab-inactive); display: flex; flex-direction: column; border-bottom: 1px solid var(--border); }
+    .tab-bar { display: flex; align-items: center; padding: 6px 6px 0 6px; gap: 4px; }
+    .tab { background: transparent; padding: 8px 14px; border-radius: 8px 8px 0 0; font-size: 13px; color: #8b8e98; cursor: pointer; display: flex; align-items: center; gap: 8px; min-width: 120px; max-width: 200px; user-select: none; }
+    .tab.active { background: var(--topbar); color: var(--text); border: 1px solid var(--border); border-bottom: none; }
+    .tab-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tab-close { border: none; background: none; color: #8b8e98; cursor: pointer; font-size: 14px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+    .tab-close:hover { background: rgba(255,255,255,0.1); color: #fff; }
+    .add-tab-btn { background: none; border: none; color: var(--text); font-size: 18px; padding: 4px 10px; cursor: pointer; border-radius: 4px; }
+    .add-tab-btn:hover { background: var(--topbar); }
+
+    /* Address Bar Toolbar */
+    .toolbar { background: var(--topbar); display: flex; align-items: center; padding: 8px 12px; gap: 8px; }
+    .nav-btn { background: none; border: none; color: var(--text); font-size: 16px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+    .nav-btn:hover { background: rgba(255,255,255,0.08); }
+    .address-bar { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; }
+    .address-bar input { width: 100%; background: none; border: none; outline: none; color: var(--text); font-size: 13px; }
+
+    /* Quick Shortcuts */
+    .bookmarks { background: var(--topbar); display: flex; gap: 12px; padding: 4px 16px 8px 16px; border-bottom: 1px solid var(--border); font-size: 12px; }
+    .bm-link { color: #8b8e98; cursor: pointer; text-decoration: none; }
+    .bm-link:hover { color: var(--text); }
+
+    /* Viewport Frame Container */
+    .viewport { flex: 1; position: relative; background: var(--bg); }
+    iframe { width: 100%; height: 100%; border: none; display: none; }
+    iframe.active { display: block; }
+    .home-screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 5; }
+    .home-screen h1 { color: #60a5fa; font-size: 28px; margin-bottom: 8px; }
+    .home-screen p { color: #8b8e98; font-size: 14px; }
+  </style>
+</head>
+<body>
+
+  <div class="chrome">
+    <div class="tab-bar" id="tabBar">
+      <button class="add-tab-btn" onclick="createNewTab()">+</button>
+    </div>
+    <div class="toolbar">
+      <button class="nav-btn" onclick="navActive('back')">&#129144;</button>
+      <button class="nav-btn" onclick="navActive('forward')">&#129146;</button>
+      <button class="nav-btn" onclick="navActive('reload')">&#8635;</button>
+      <div class="address-bar">
+        <input type="text" id="urlInput" placeholder="Search Google or type a URL..." onkeydown="handleEnter(event)">
+      </div>
+    </div>
+    <div class="bookmarks">
+      <span class="bm-link" onclick="loadInActive('https://www.google.com')">🔍 Google</span>
+      <span class="bm-link" onclick="loadInActive('https://www.wikipedia.org')">🌐 Wikipedia</span>
+      <span class="bm-link" onclick="loadInActive('https://www.reddit.com')">🤖 Reddit</span>
+      <span class="bm-link" onclick="loadInActive('https://www.github.com')">🐙 GitHub</span>
+    </div>
+  </div>
+
+  <div class="viewport" id="viewport">
+    <div class="home-screen" id="homeScreen">
+      <h1>Browser Hub</h1>
+      <p>Enter a URL above to start browsing inside tabs.</p>
+    </div>
+  </div>
+
+  <script>
+    let tabs = [];
+    let activeId = null;
+
+    function createNewTab(targetUrl = "") {
+      const id = "tab-" + Date.now();
+      
+      const tabEl = document.createElement("div");
+      tabEl.className = "tab";
+      tabEl.onclick = () => switchTab(id);
+      tabEl.innerHTML = `
+        <span class="tab-title">New Tab</span>
+        <button class="tab-close" onclick="closeTab('${id}', event)">&times;</button>
+      `;
+
+      const iframeEl = document.createElement("iframe");
+
+      const tabObj = { id, tabEl, iframeEl, url: "" };
+      tabs.push(tabObj);
+
+      const addBtn = document.querySelector(".add-tab-btn");
+      document.getElementById("tabBar").insertBefore(tabEl, addBtn);
+      document.getElementById("viewport").appendChild(iframeEl);
+
+      switchTab(id);
+      if (targetUrl) loadInActive(targetUrl);
+    }
+
+    function switchTab(id) {
+      activeId = id;
+      const homeScreen = document.getElementById("homeScreen");
+      const urlInput = document.getElementById("urlInput");
+
+      tabs.forEach(t => {
+        if (t.id === id) {
+          t.tabEl.classList.add("active");
+          t.iframeEl.classList.add("active");
+          urlInput.value = t.url;
+          homeScreen.style.display = t.url ? "none" : "flex";
+        } else {
+          t.tabEl.classList.remove("active");
+          t.iframeEl.classList.remove("active");
+        }
+      });
+    }
+
+    function closeTab(id, e) {
+      e.stopPropagation();
+      const idx = tabs.findIndex(t => t.id === id);
+      if (idx === -1) return;
+
+      tabs[idx].tabEl.remove();
+      tabs[idx].iframeEl.remove(); // Removes frame entirely to prevent memory crashes
+      tabs.splice(idx, 1);
+
+      if (activeId === id) {
+        if (tabs.length > 0) {
+          switchTab(tabs[Math.max(0, idx - 1)].id);
+        } else {
+          activeId = null;
+          document.getElementById("urlInput").value = "";
+          document.getElementById("homeScreen").style.display = "flex";
+        }
+      }
+    }
+
+    function loadInActive(inputUrl) {
+      if (!activeId) createNewTab();
+      const tab = tabs.find(t => t.id === activeId);
+      if (!tab) return;
+
+      let finalUrl = inputUrl.trim();
+      if (!/^https?:\/\//i.test(finalUrl)) {
+        if (finalUrl.includes(".") && !finalUrl.includes(" ")) {
+          finalUrl = "https://" + finalUrl;
+        } else {
+          finalUrl = "https://www.google.com/search?q=" + encodeURIComponent(finalUrl);
+        }
+      }
+
+      tab.url = finalUrl;
+      try {
+        tab.tabEl.querySelector(".tab-title").innerText = new URL(finalUrl).hostname.replace("www.", "");
+      } catch(e) {
+        tab.tabEl.querySelector(".tab-title").innerText = finalUrl;
+      }
+
+      document.getElementById("urlInput").value = finalUrl;
+      document.getElementById("homeScreen").style.display = "none";
+
+      // Pass URL through local server proxy endpoint
+      tab.iframeEl.src = "/proxy?url=" + encodeURIComponent(finalUrl);
+    }
+
+    function handleEnter(e) {
+      if (e.key === "Enter") loadInActive(e.target.value);
+    }
+
+    function navActive(action) {
+      const tab = tabs.find(t => t.id === activeId);
+      if (!tab || !tab.iframeEl) return;
+      try {
+        if (action === 'reload') tab.iframeEl.src = tab.iframeEl.src;
+        if (action === 'back') tab.iframeEl.contentWindow.history.back();
+        if (action === 'forward') tab.iframeEl.contentWindow.history.forward();
+      } catch(e){}
+    }
+
+    // Start with 1 default tab
+    createNewTab();
+  </script>
+</body>
+</html>
