@@ -16,7 +16,6 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-    /* Top Chrome UI */
     .chrome { background: var(--tab-inactive); display: flex; flex-direction: column; border-bottom: 1px solid var(--border); }
     .tab-bar { display: flex; align-items: center; padding: 6px 6px 0 6px; gap: 4px; }
     .tab { background: transparent; padding: 8px 14px; border-radius: 8px 8px 0 0; font-size: 13px; color: #8b8e98; cursor: pointer; display: flex; align-items: center; gap: 8px; min-width: 120px; max-width: 200px; user-select: none; }
@@ -27,19 +26,16 @@
     .add-tab-btn { background: none; border: none; color: var(--text); font-size: 18px; padding: 4px 10px; cursor: pointer; border-radius: 4px; }
     .add-tab-btn:hover { background: var(--topbar); }
 
-    /* Address Bar Toolbar */
     .toolbar { background: var(--topbar); display: flex; align-items: center; padding: 8px 12px; gap: 8px; }
     .nav-btn { background: none; border: none; color: var(--text); font-size: 16px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
     .nav-btn:hover { background: rgba(255,255,255,0.08); }
     .address-bar { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; }
     .address-bar input { width: 100%; background: none; border: none; outline: none; color: var(--text); font-size: 13px; }
 
-    /* Quick Shortcuts */
     .bookmarks { background: var(--topbar); display: flex; gap: 12px; padding: 4px 16px 8px 16px; border-bottom: 1px solid var(--border); font-size: 12px; }
     .bm-link { color: #8b8e98; cursor: pointer; text-decoration: none; }
     .bm-link:hover { color: var(--text); }
 
-    /* Viewport Frame Container */
     .viewport { flex: 1; position: relative; background: var(--bg); }
     iframe { width: 100%; height: 100%; border: none; display: none; }
     iframe.active { display: block; }
@@ -55,18 +51,18 @@
       <button class="add-tab-btn" onclick="createNewTab()">+</button>
     </div>
     <div class="toolbar">
-      <button class="nav-btn" onclick="navActive('back')">&#129144;</button>
-      <button class="nav-btn" onclick="navActive('forward')">&#129146;</button>
-      <button class="nav-btn" onclick="navActive('reload')">&#8635;</button>
+      <button class="nav-btn" onclick="goBack()">&#129144;</button>
+      <button class="nav-btn" onclick="goForward()">&#129146;</button>
+      <button class="nav-btn" onclick="reloadTab()">&#8635;</button>
       <div class="address-bar">
         <input type="text" id="urlInput" placeholder="Search Google or type a URL..." onkeydown="handleEnter(event)">
       </div>
     </div>
     <div class="bookmarks">
       <span class="bm-link" onclick="loadInActive('https://www.google.com')">🔍 Google</span>
+      <span class="bm-link" onclick="loadInActive('https://defly.io')">🎮 Defly.io</span>
       <span class="bm-link" onclick="loadInActive('https://www.wikipedia.org')">🌐 Wikipedia</span>
       <span class="bm-link" onclick="loadInActive('https://www.reddit.com')">🤖 Reddit</span>
-      <span class="bm-link" onclick="loadInActive('https://www.github.com')">🐙 GitHub</span>
     </div>
   </div>
 
@@ -94,7 +90,8 @@
 
       const iframeEl = document.createElement("iframe");
 
-      const tabObj = { id, tabEl, iframeEl, url: "" };
+      // Tab tracking with custom history stack for back/forward support
+      const tabObj = { id, tabEl, iframeEl, url: "", history: [], historyIndex: -1 };
       tabs.push(tabObj);
 
       const addBtn = document.querySelector(".add-tab-btn");
@@ -129,7 +126,7 @@
       if (idx === -1) return;
 
       tabs[idx].tabEl.remove();
-      tabs[idx].iframeEl.remove(); // Removes frame entirely to prevent memory crashes
+      tabs[idx].iframeEl.remove();
       tabs.splice(idx, 1);
 
       if (activeId === id) {
@@ -143,7 +140,7 @@
       }
     }
 
-    function loadInActive(inputUrl) {
+    function loadInActive(inputUrl, isNavigatingHistory = false) {
       if (!activeId) createNewTab();
       const tab = tabs.find(t => t.id === activeId);
       if (!tab) return;
@@ -158,6 +155,14 @@
       }
 
       tab.url = finalUrl;
+
+      // Maintain internal history stack if not navigating back/forward
+      if (!isNavigatingHistory) {
+        tab.history = tab.history.slice(0, tab.historyIndex + 1);
+        tab.history.push(finalUrl);
+        tab.historyIndex = tab.history.length - 1;
+      }
+
       try {
         tab.tabEl.querySelector(".tab-title").innerText = new URL(finalUrl).hostname.replace("www.", "");
       } catch(e) {
@@ -166,26 +171,32 @@
 
       document.getElementById("urlInput").value = finalUrl;
       document.getElementById("homeScreen").style.display = "none";
-
-      // Pass URL through local server proxy endpoint
       tab.iframeEl.src = "/proxy?url=" + encodeURIComponent(finalUrl);
+    }
+
+    function goBack() {
+      const tab = tabs.find(t => t.id === activeId);
+      if (!tab || tab.historyIndex <= 0) return;
+      tab.historyIndex--;
+      loadInActive(tab.history[tab.historyIndex], true);
+    }
+
+    function goForward() {
+      const tab = tabs.find(t => t.id === activeId);
+      if (!tab || tab.historyIndex >= tab.history.length - 1) return;
+      tab.historyIndex++;
+      loadInActive(tab.history[tab.historyIndex], true);
+    }
+
+    function reloadTab() {
+      const tab = tabs.find(t => t.id === activeId);
+      if (tab && tab.iframeEl) tab.iframeEl.src = tab.iframeEl.src;
     }
 
     function handleEnter(e) {
       if (e.key === "Enter") loadInActive(e.target.value);
     }
 
-    function navActive(action) {
-      const tab = tabs.find(t => t.id === activeId);
-      if (!tab || !tab.iframeEl) return;
-      try {
-        if (action === 'reload') tab.iframeEl.src = tab.iframeEl.src;
-        if (action === 'back') tab.iframeEl.contentWindow.history.back();
-        if (action === 'forward') tab.iframeEl.contentWindow.history.forward();
-      } catch(e){}
-    }
-
-    // Start with 1 default tab
     createNewTab();
   </script>
 </body>
