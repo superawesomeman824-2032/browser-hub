@@ -76,13 +76,13 @@
       </button>
       <div class="address-wrapper">
         <div class="address-bar">
-          <input type="text" id="urlInput" placeholder="Search Google or type a URL..." oninput="fetchSuggestions(this.value)" onkeydown="handleKeyDown(event)" autocomplete="off">
+          <input type="text" id="urlInput" placeholder="Search the web or type a URL..." oninput="fetchSuggestions(this.value)" onkeydown="handleKeyDown(event)" autocomplete="off">
         </div>
         <div class="suggestions-dropdown" id="suggestionsBox"></div>
       </div>
     </div>
     <div class="bookmarks">
-      <span class="bm-link" onclick="loadInActive('https://www.google.com/webhp?igu=1')">Google</span>
+      <span class="bm-link" onclick="loadInActive('https://html.duckduckgo.com/html/')">Search</span>
       <span class="bm-link" onclick="loadInActive('https://defly.io')">Defly.io</span>
       <span class="bm-link" onclick="loadInActive('https://www.wikipedia.org')">Wikipedia</span>
       <span class="bm-link" onclick="loadInActive('https://www.reddit.com')">Reddit</span>
@@ -221,7 +221,7 @@
         if (!/^https?:\/\//i.test(raw)) return "https://" + raw;
         return raw;
       }
-      return `https://www.google.com/search?q=${encodeURIComponent(raw)}&igu=1`;
+      return `https://html.duckduckgo.com/html/?q=${encodeURIComponent(raw)}`;
     }
 
     function loadInActive(inputUrl, isNavigatingHistory = false) {
@@ -242,7 +242,7 @@
 
       try {
         const parsed = new URL(finalUrl);
-        if (parsed.hostname.includes("google.com") && parsed.searchParams.has("q")) {
+        if (parsed.searchParams.has("q")) {
           tab.tabEl.querySelector(".tab-title").innerText = parsed.searchParams.get("q");
         } else {
           tab.tabEl.querySelector(".tab-title").innerText = parsed.hostname.replace("www.", "");
