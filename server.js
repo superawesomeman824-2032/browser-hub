@@ -1,20 +1,19 @@
 const express = require('express');
 const path = require('path');
-const { createProxyMiddleware } = require('http-proxy-middleware');
+const { createProxyMiddleware, responseInterceptor } = require('http-proxy-middleware');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Serve static frontend files from "public" directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// CATCH GOOGLE SEARCHES: Redirects /search?q=... through the proxy URL handler
+// Redirect standard search queries
 app.get('/search', (req, res) => {
   const googleSearchUrl = 'https://www.google.com' + req.originalUrl;
   res.redirect('/proxy?url=' + encodeURIComponent(googleSearchUrl));
 });
 
-// Proxy endpoint
+// Main Proxy Handler
 app.all('/proxy', (req, res, next) => {
   const targetUrl = req.query.url;
   if (!targetUrl) return res.status(400).send('Missing target URL');
@@ -30,18 +29,30 @@ app.all('/proxy', (req, res, next) => {
     target: parsedUrl.origin,
     changeOrigin: true,
     followRedirects: true,
+    selfHandleResponse: true,
     pathRewrite: () => parsedUrl.pathname + parsedUrl.search,
     on: {
-      proxyRes: (proxyRes) => {
+      proxyRes: responseInterceptor(async (responseBuffer, proxyRes, req, res) => {
+        // Strip iframe blocking headers
         delete proxyRes.headers['x-frame-options'];
         delete proxyRes.headers['content-security-policy'];
         delete proxyRes.headers['content-security-policy-report-only'];
-        proxyRes.headers['access-control-allow-origin'] = '*';
-      }
+        res.setHeader('access-control-allow-origin', '*');
+
+        const contentType = proxyRes.headers['content-type'] || '';
+        // Inject base tag for HTML pages so relative image/script paths load properly
+        if (contentType.includes('text/html')) {
+          let html = responseBuffer.toString('utf8');
+          const baseTag = `<base href="${parsedUrl.origin}/">`;
+          html = html.replace(/<head[^>]*>/i, `$&${baseTag}`);
+          return html;
+        }
+        return responseBuffer;
+      })
     }
   });
 
   return proxy(req, res, next);
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server active on port ${PORT}`));
