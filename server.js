@@ -7,10 +7,9 @@ const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 
-// Serve static frontend files from 'public'
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Google Search Autocomplete API
+// Search Suggestions API
 app.get('/api/suggestions', async (req, res) => {
   const query = req.query.q;
   if (!query) return res.json([]);
@@ -23,20 +22,20 @@ app.get('/api/suggestions', async (req, res) => {
   }
 });
 
-// Smart Google Search Redirect Handler (&igu=1 allows iframe embedding)
+// Smart Search Route (Uses DuckDuckGo HTML engine to bypass Render/Cloud IP CAPTCHAs)
 app.get('/search', (req, res) => {
   const query = req.query.q || '';
-  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&igu=1`;
+  const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
   res.redirect('/proxy?url=' + encodeURIComponent(searchUrl));
 });
 
-// Proxy Engine
+// Main Proxy Engine
 const proxy = createProxyMiddleware({
-  target: 'https://www.google.com',
+  target: 'https://duckduckgo.com',
   changeOrigin: true,
   ws: true,
-  followRedirects: false, // Handle redirects manually to keep them inside proxy
-  selfHandleResponse: true, // Handle HTML injection safely
+  followRedirects: true,
+  selfHandleResponse: true,
   router: (req) => {
     const targetUrl = req.query.url;
     if (targetUrl) {
@@ -45,7 +44,7 @@ const proxy = createProxyMiddleware({
         return parsed.origin;
       } catch (e) {}
     }
-    return 'https://www.google.com';
+    return 'https://duckduckgo.com';
   },
   pathRewrite: (pathStr, req) => {
     const targetUrl = req.query.url;
@@ -69,15 +68,14 @@ const proxy = createProxyMiddleware({
         } catch (e) {}
       }
       
-      // Request uncompressed response to prevent gzip/brotli buffer corruption
       proxyReq.setHeader('accept-encoding', 'identity');
-      proxyReq.setHeader('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+      proxyReq.setHeader('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36');
       proxyReq.removeHeader('x-forwarded-for');
       proxyReq.removeHeader('x-forwarded-proto');
       proxyReq.removeHeader('x-forwarded-host');
     },
     proxyRes: responseInterceptor(async (responseBuffer, proxyRes, req, res) => {
-      // Strip frame restrictions and CSP headers
+      // Strip framing and security constraints
       delete proxyRes.headers['x-frame-options'];
       delete proxyRes.headers['content-security-policy'];
       delete proxyRes.headers['content-security-policy-report-only'];
@@ -86,38 +84,44 @@ const proxy = createProxyMiddleware({
       delete proxyRes.headers['frame-options'];
 
       res.setHeader('access-control-allow-origin', '*');
-
-      // Intercept and rewrite 301/302 Redirect Location Headers
-      if (proxyRes.headers.location) {
-        try {
-          const currentTarget = req.query.url || 'https://www.google.com';
-          const currentOrigin = new URL(currentTarget.startsWith('http') ? currentTarget : 'https://' + currentTarget).origin;
-          const redirectTarget = new URL(proxyRes.headers.location, currentOrigin).href;
-          res.setHeader('location', '/proxy?url=' + encodeURIComponent(redirectTarget));
-        } catch(e) {}
-      }
+      res.setHeader('access-control-allow-methods', '*');
+      res.setHeader('access-control-allow-headers', '*');
 
       const contentType = proxyRes.headers['content-type'] || '';
       
-      // Inject Anti-Iframe-Busting + Base URL tag into HTML pages
       if (contentType.includes('text/html')) {
         let html = responseBuffer.toString('utf8');
         
-        let origin = 'https://www.google.com';
+        let origin = 'https://duckduckgo.com';
         if (req.query.url) {
           try {
             origin = new URL(req.query.url.startsWith('http') ? req.query.url : 'https://' + req.query.url).origin;
           } catch(e) {}
         }
 
+        // Script injection: Overrides iframe-busting scripts + rewrites fetch/WebSocket calls for games like defly.io
         const injection = `
           <head>
           <base href="${origin}/">
           <script>
-            try {
-              Object.defineProperty(window, 'top', { get: function() { return window.self; } });
-              Object.defineProperty(window, 'parent', { get: function() { return window.self; } });
-            } catch(e) {}
+            (function() {
+              try {
+                Object.defineProperty(window, 'top', { get: function() { return window.self; } });
+                Object.defineProperty(window, 'parent', { get: function() { return window.self; } });
+              } catch(e) {}
+
+              // Intercept fetch & XMLHttpRequest for game assets
+              const originalFetch = window.fetch;
+              window.fetch = function(resource, init) {
+                if (typeof resource === 'string' && !resource.startsWith('/proxy') && !resource.startsWith('data:')) {
+                  try {
+                    const resolved = new URL(resource, '${origin}').href;
+                    resource = '/proxy?url=' + encodeURIComponent(resolved);
+                  } catch(e) {}
+                }
+                return originalFetch.apply(this, [resource, init]);
+              };
+            })();
           </script>
         `;
 
@@ -135,7 +139,7 @@ const proxy = createProxyMiddleware({
     error: (err, req, res) => {
       console.error('Proxy Error:', err.message);
       if (res && !res.headersSent) {
-        res.status(502).send('Connection Error: ' + err.message);
+        res.status(502).send('Proxy Connection Error: ' + err.message);
       }
     }
   }
@@ -143,11 +147,11 @@ const proxy = createProxyMiddleware({
 
 app.use('/proxy', proxy);
 
-// Handle WebSocket upgrades for games
+// Upgrade WebSocket connections for real-time io games (e.g. defly.io)
 server.on('upgrade', (req, socket, head) => {
   if (req.url && req.url.startsWith('/proxy')) {
     proxy.upgrade(req, socket, head);
   }
 });
 
-server.listen(PORT, () => console.log(`Browser Hub active on port ${PORT}`));
+server.listen(PORT, () => console.log(`Browser Hub running on port ${PORT}`));
